@@ -1,0 +1,18 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+flask = "==3.1.2"
+anthropic = "==0.79.0"
+python-dotenv = "==1.2.1"
+pandas = "==3.0.0"
+openpyxl = "==3.1.5"
+instructor = "==1.14.5"
+pydantic = "==2.12.5"
+
+[dev-packages]
+
+[requires]
+python_version = "3.11"
