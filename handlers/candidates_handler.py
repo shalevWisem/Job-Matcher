@@ -1,11 +1,17 @@
-from find_candidates.excel_handler import ExcelHandler
-from llm_calls.calls import extract_job_keywords, select_top_job_matches
+import os
 import anthropic
 from  dotenv import load_dotenv
 
+from handlers.data_handler import ExcelHandler
+from llm_calls.calls import extract_job_keywords, select_top_job_matches
+from handlers.config import DataConfig
+
+
 load_dotenv()
 
-def count_tokens(text: str, model: str = "claude-sonnet-4-20250514") -> int:
+config = DataConfig()
+
+def count_tokens(text: str, model: str = config.default_model) -> int:
     """
     Count the number of tokens in a text string for a given Claude model.
 
@@ -24,11 +30,12 @@ def count_tokens(text: str, model: str = "claude-sonnet-4-20250514") -> int:
     )
 
     return token_count.input_tokens
+
 class Finder:
 
     def __init__(self, job_description: str):
         self.job_description = job_description
-        self.excel_handler = ExcelHandler('../data/2025_Radford_job_structure_and_descriptions.xlsx')
+        self.excel_handler = ExcelHandler(config.db_path)
         self.df = self.excel_handler.read_file()
 
     def get_rows_from_keywords(self):
@@ -36,7 +43,7 @@ class Finder:
         primary = keywords["primary_keywords"]
         secondary = keywords["secondary_keywords"]
         primary_filter = self.excel_handler.filter_rows_by_strings(primary)
-        if count_tokens(primary_filter.to_string()) <= 50000:
+        if count_tokens(primary_filter.to_string()) <= config.max_tokens:
             return primary_filter
         else:
             secondary_filter = self.excel_handler.filter_rows_by_strings(secondary)
@@ -48,7 +55,7 @@ class Finder:
         return top_5.model_dump()
 
 if __name__ == '__main__':
-    job_description = """
+    jd = """
         Senior Data Scientist - Investment Analytics
 
         We are seeking an experienced Data Scientist to join our Asset Management team. You will develop and deploy machine learning models to support portfolio management decisions and enhance our quantitative investment strategies.
@@ -71,7 +78,7 @@ if __name__ == '__main__':
 
         This role requires someone who can bridge the gap between data science and investment management, working across multiple asset classes to deliver actionable insights.
         """
-    finder = Finder(job_description)
+    finder = Finder(jd)
     print(finder.get_top_5_candidates())
 
 
