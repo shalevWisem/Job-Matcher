@@ -107,7 +107,9 @@ Please analyze this job description against the filtered candidates and return t
         response_model=JobMatchResults
     )
 
-    return message
+    json_response = message.model_dump(by_alias=True)
+
+    return json_response
 
 
 if __name__ == '__main__':

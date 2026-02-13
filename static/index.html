@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Job Code Classifier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181b;
+    --surface-hover: #1f1f23;
+    --border: #27272a;
+    --border-light: #3f3f46;
+    --text: #fafafa;
+    --text-muted: #a1a1aa;
+    --text-dim: #71717a;
+    --accent: #c4b5fd;
+    --accent-dim: rgba(196, 181, 253, 0.08);
+    --accent-glow: rgba(196, 181, 253, 0.15);
+    --green: #86efac;
+    --green-dim: rgba(134, 239, 172, 0.1);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    background-size: 256px;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  .glow { position: fixed; width: 600px; height: 600px; border-radius: 50%; filter: blur(120px); opacity: 0.07; pointer-events: none; z-index: 0; }
+  .glow-1 { background: #8b5cf6; top: -200px; right: -100px; }
+  .glow-2 { background: #6366f1; bottom: -200px; left: -200px; }
+
+  .container {
+    position: relative; z-index: 1;
+    max-width: 760px; margin: 0 auto; padding: 60px 24px 80px;
+  }
+
+  .header { margin-bottom: 48px; animation: fadeUp 0.6s ease both; }
+  .header .label {
+    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .header .label::before {
+    content: ''; display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--accent); animation: pulse 2s ease infinite;
+  }
+  .header h1 {
+    font-family: 'Instrument Serif', serif; font-weight: 400;
+    font-size: clamp(36px, 5vw, 52px); line-height: 1.1; letter-spacing: -0.02em;
+  }
+  .header h1 em { font-style: italic; color: var(--accent); }
+  .header p { margin-top: 12px; font-size: 15px; color: var(--text-muted); font-weight: 300; line-height: 1.6; }
+
+  .input-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; margin-bottom: 20px;
+    animation: fadeUp 0.6s ease 0.1s both; transition: border-color 0.3s ease;
+  }
+  .input-card:focus-within { border-color: var(--border-light); }
+  .input-card label {
+    display: block; font-family: 'DM Mono', monospace; font-size: 11px;
+    letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 12px;
+  }
+
+  textarea {
+    width: 100%; height: 180px; background: transparent; border: none; outline: none;
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 15px;
+    font-weight: 300; line-height: 1.7; resize: vertical;
+  }
+  textarea::placeholder { color: var(--text-dim); }
+
+  .actions { display: flex; align-items: center; gap: 16px; animation: fadeUp 0.6s ease 0.2s both; }
+
+  .btn {
+    position: relative; padding: 14px 32px; background: var(--accent); color: var(--bg);
+    border: none; border-radius: var(--radius-sm); font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer;
+    transition: all 0.25s ease; overflow: hidden;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(196, 181, 253, 0.2); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn .spinner {
+    display: none; width: 16px; height: 16px; border: 2px solid transparent;
+    border-top-color: var(--bg); border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px;
+  }
+  .btn.loading .spinner { display: inline-block; }
+  .btn.loading .btn-text { opacity: 0.7; }
+
+  .status { font-size: 13px; color: var(--text-dim); font-weight: 300; }
+  .error { color: #fca5a5; font-size: 13px; margin-top: 12px; animation: fadeUp 0.3s ease; }
+
+  .result { display: none; margin-top: 32px; animation: fadeUp 0.5s ease; }
+  .result.visible { display: block; }
+
+  .result-section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; margin-bottom: 16px;
+  }
+  .result-section .section-label {
+    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--text-dim); margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-label .icon { width: 16px; height: 16px; opacity: 0.5; }
+
+  .codes-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+
+  .code-tag {
+    display: flex; align-items: center; gap: 6px; padding: 10px 16px;
+    background: var(--accent-dim); border: 1px solid rgba(196, 181, 253, 0.12);
+    border-radius: var(--radius-sm); font-family: 'DM Mono', monospace;
+    font-size: 13px; font-weight: 500; color: var(--accent);
+    transition: all 0.2s ease; opacity: 0; animation: tagIn 0.4s ease forwards;
+  }
+  .code-tag:hover { background: var(--accent-glow); border-color: rgba(196, 181, 253, 0.25); transform: translateY(-1px); }
+  .code-tag .rank {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: rgba(196, 181, 253, 0.12); font-size: 10px; color: var(--text-dim);
+  }
+  .code-tag.best { background: var(--green-dim); border-color: rgba(134, 239, 172, 0.15); color: var(--green); }
+  .code-tag.best:hover { background: rgba(134, 239, 172, 0.15); border-color: rgba(134, 239, 172, 0.3); }
+  .code-tag.best .rank { background: rgba(134, 239, 172, 0.15); color: var(--green); }
+
+  .reasoning-text { font-size: 14px; font-weight: 300; line-height: 1.8; color: var(--text-muted); }
+
+  /* ===== BIRTHDAY OVERLAY ===== */
+  .birthday-overlay {
+    position: fixed; inset: 0; z-index: 10000;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .birthday-overlay.active { display: flex; }
+
+  .birthday-card {
+    position: relative;
+    text-align: center;
+    padding: 48px 56px 52px;
+    max-width: 520px;
+    width: 90%;
+    background: radial-gradient(ellipse at top, #2a1f4e 0%, #141218 70%);
+    border: 1px solid rgba(196, 181, 253, 0.2);
+    border-radius: 24px;
+    box-shadow: 0 0 80px rgba(139, 92, 246, 0.15), 0 0 200px rgba(139, 92, 246, 0.05);
+    animation: cardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .birthday-card .photo {
+    width: 130px; height: 130px; border-radius: 50%;
+    object-fit: cover; margin: 0 auto 24px;
+    border: 3px solid var(--accent);
+    box-shadow: 0 0 30px rgba(196, 181, 253, 0.3);
+    animation: photoIn 0.6s ease 0.3s both;
+  }
+
+  .birthday-card .bday-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 38px; font-weight: 700;
+    background: linear-gradient(135deg, #c4b5fd 0%, #f9a8d4 50%, #fde68a 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.2; margin-bottom: 8px;
+    animation: textIn 0.5s ease 0.5s both;
+  }
+
+  .birthday-card .bday-name {
+    font-family: 'Instrument Serif', serif;
+    font-size: 52px; font-weight: 400; font-style: italic;
+    color: #fff;
+    margin-bottom: 16px;
+    animation: textIn 0.5s ease 0.65s both;
+    text-shadow: 0 0 40px rgba(196, 181, 253, 0.3);
+  }
+
+  .birthday-card .bday-sub {
+    font-size: 16px; color: var(--text-muted); font-weight: 300;
+    animation: textIn 0.5s ease 0.8s both;
+  }
+
+  .birthday-card .bday-emoji {
+    font-size: 28px;
+    margin-top: 20px;
+    animation: textIn 0.5s ease 0.95s both;
+  }
+
+  .birthday-close {
+    position: absolute; top: 16px; right: 20px;
+    background: none; border: none; color: var(--text-dim);
+    font-size: 24px; cursor: pointer; padding: 4px 8px;
+    transition: color 0.2s;
+    animation: textIn 0.3s ease 1.2s both;
+  }
+  .birthday-close:hover { color: var(--text); }
+
+  /* Confetti canvas */
+  #confetti-canvas {
+    position: fixed; inset: 0; z-index: 10001;
+    pointer-events: none;
+  }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes tagIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes cardIn { from { opacity: 0; transform: scale(0.85) translateY(30px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  @keyframes photoIn { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+  @keyframes textIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  @media (max-width: 500px) {
+    .container { padding: 40px 16px 60px; }
+    .input-card, .result-section { padding: 20px; }
+    .birthday-card { padding: 36px 28px 40px; }
+    .birthday-card .bday-text { font-size: 28px; }
+    .birthday-card .bday-name { font-size: 38px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="glow glow-1"></div>
+<div class="glow glow-2"></div>
+
+<!-- Confetti -->
+<canvas id="confetti-canvas"></canvas>
+
+<!-- Birthday Overlay -->
+<div class="birthday-overlay" id="birthdayOverlay">
+  <div class="birthday-card">
+    <button class="birthday-close" onclick="closeBirthday()">&times;</button>
+    <img src="/static/armi.png" class="photo" alt="Armi">
+    <div class="bday-text">Happy Birthday!</div>
+    <div class="bday-name">Armi Noorata</div>
+    <div class="bday-sub">Wishing you an incredible year ahead ✨</div>
+    <div class="bday-emoji">🎂 🎉 🥳</div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div class="label">Classification Engine</div>
+    <h1>Paste a job description,<br>get <em>matched codes</em></h1>
+    <p>Analyzes job descriptions and returns the top matching job codes with reasoning.</p>
+  </div>
+
+  <div class="input-card">
+    <label for="jd">Job Description</label>
+    <textarea id="jd" placeholder="Paste the full job description here…"></textarea>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="btn" onclick="classify()">
+      <span class="spinner"></span>
+      <span class="btn-text">Classify</span>
+    </button>
+    <span class="status" id="status"></span>
+  </div>
+  <div id="error" class="error"></div>
+
+  <div id="result" class="result">
+    <div class="result-section">
+      <div class="section-label">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Top Job Codes
+      </div>
+      <div id="codes" class="codes-grid"></div>
+    </div>
+    <div class="result-section">
+      <div class="section-label">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Reasoning
+      </div>
+      <div id="reasoning" class="reasoning-text"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== CONFETTI ENGINE =====
+const canvas = document.getElementById('confetti-canvas');
+const ctx = canvas.getContext('2d');
+let confettiPieces = [];
+let confettiRunning = false;
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+const COLORS = ['#c4b5fd','#f9a8d4','#fde68a','#86efac','#93c5fd','#fca5a5','#fdba74','#a78bfa','#fb7185','#34d399'];
+
+function randomBetween(a, b) { return a + Math.random() * (b - a); }
+
+function createConfettiPiece() {
+  return {
+    x: randomBetween(0, canvas.width),
+    y: randomBetween(-canvas.height, -10),
+    w: randomBetween(6, 12),
+    h: randomBetween(4, 8),
+    color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    rotation: randomBetween(0, 360),
+    rotSpeed: randomBetween(-6, 6),
+    vx: randomBetween(-2, 2),
+    vy: randomBetween(2, 7),
+    opacity: 1,
+    wobble: randomBetween(0, Math.PI * 2),
+    wobbleSpeed: randomBetween(0.03, 0.08),
+  };
+}
+
+function launchConfetti(count = 200) {
+  confettiPieces = [];
+  for (let i = 0; i < count; i++) {
+    const p = createConfettiPiece();
+    // stagger start positions more for burst effect
+    p.y = randomBetween(-600, -10);
+    confettiPieces.push(p);
+  }
+  if (!confettiRunning) {
+    confettiRunning = true;
+    animateConfetti();
+  }
+}
+
+function animateConfetti() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  confettiPieces.forEach((p, i) => {
+    p.wobble += p.wobbleSpeed;
+    p.x += p.vx + Math.sin(p.wobble) * 0.5;
+    p.y += p.vy;
+    p.rotation += p.rotSpeed;
+    // Fade out near bottom
+    if (p.y > canvas.height - 100) {
+      p.opacity = Math.max(0, (canvas.height - p.y) / 100);
+    }
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate((p.rotation * Math.PI) / 180);
+    ctx.globalAlpha = p.opacity;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+    ctx.restore();
+  });
+  // Remove dead pieces
+  confettiPieces = confettiPieces.filter(p => p.y < canvas.height + 20 && p.opacity > 0);
+  if (confettiPieces.length > 0) {
+    requestAnimationFrame(animateConfetti);
+  } else {
+    confettiRunning = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
+// ===== BIRTHDAY EASTER EGG =====
+let birthdayTriggered = false;
+
+function checkForBirthday(text) {
+  if (birthdayTriggered) return;
+  if (text.toLowerCase().includes('armi noorata')) {
+    birthdayTriggered = true;
+    triggerBirthday();
+  }
+}
+
+function triggerBirthday() {
+  document.getElementById('birthdayOverlay').classList.add('active');
+  launchConfetti(250);
+  // Second wave
+  setTimeout(() => launchConfetti(150), 1200);
+  setTimeout(() => launchConfetti(80), 2800);
+}
+
+function closeBirthday() {
+  document.getElementById('birthdayOverlay').classList.remove('active');
+}
+
+// Birthday is now triggered via the classify button only
+
+// ===== CLASSIFY =====
+async function classify() {
+  const jd = document.getElementById('jd').value.trim();
+  if (!jd) return;
+
+  // Check for birthday easter egg on classify
+  if (!birthdayTriggered && jd.toLowerCase().includes('armi noorata')) {
+    birthdayTriggered = true;
+    triggerBirthday();
+    return; // show the celebration, don't call the API
+  }
+
+  const btn = document.getElementById('btn');
+  const status = document.getElementById('status');
+  const errEl = document.getElementById('error');
+  const resultEl = document.getElementById('result');
+  btn.classList.add('loading'); btn.disabled = true;
+  status.textContent = 'Analyzing…';
+  errEl.textContent = ''; resultEl.classList.remove('visible');
+  try {
+    const resp = await fetch('/classify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_description: jd })
+    });
+    if (!resp.ok) throw new Error('Server returned ' + resp.status);
+    const data = await resp.json();
+    document.getElementById('codes').innerHTML = data.top_job_codes.map((code, i) =>
+      `<div class="code-tag ${i === 0 ? 'best' : ''}" style="animation-delay: ${i * 0.07}s">
+        <span class="rank">${i + 1}</span>${code}
+      </div>`
+    ).join('');
+    document.getElementById('reasoning').textContent = data.reasoning;
+    resultEl.classList.add('visible');
+    status.textContent = `${data.top_job_codes.length} codes returned`;
+  } catch (e) {
+    errEl.textContent = 'Error: ' + e.message;
+    status.textContent = '';
+  }
+  btn.classList.remove('loading'); btn.disabled = false;
+}
+
+// Enter key triggers Classify (plain Enter, Ctrl+Enter, or Cmd+Enter)
+document.getElementById('jd').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    classify();
+  }
+});
+</script>
+</body>
+</html>
