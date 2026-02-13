@@ -52,7 +52,7 @@ class Finder:
     def get_top_5_candidates(self):
         final_df = self.get_rows_from_keywords()
         top_5 = select_top_job_matches(self.job_description, final_df)
-        return top_5.model_dump()
+        return top_5
 
 if __name__ == '__main__':
     jd = """
