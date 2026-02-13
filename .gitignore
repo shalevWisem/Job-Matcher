@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+data/2025_Radford_job_structure_and_descriptions.xlsx
